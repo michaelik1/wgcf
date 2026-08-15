@@ -13,6 +13,7 @@ import (
 )
 
 var profileFile string
+var keepalive int
 var shortMsg = "Generates a WireGuard profile from the current Cloudflare Warp account"
 
 var Cmd = &cobra.Command{
@@ -26,6 +27,8 @@ var Cmd = &cobra.Command{
 
 func init() {
 	Cmd.PersistentFlags().StringVarP(&profileFile, "profile", "p", "wgcf-profile.conf", "WireGuard profile file")
+	Cmd.PersistentFlags().IntVarP(&keepalive, "keepalive", "k", 0, "Persistent keepalive interval in seconds (default 25)")
+	Cmd.PersistentFlags().Lookup("keepalive").NoOptDefVal = "25"
 }
 
 func generateProfile() error {
@@ -45,6 +48,7 @@ func generateProfile() error {
 		Address2:   thisDevice.Config.Interface.Addresses.V6,
 		PublicKey:  thisDevice.Config.Peers[0].PublicKey,
 		Endpoint:   thisDevice.Config.Peers[0].Endpoint.Host,
+		Keepalive:  keepalive,
 	})
 	if err != nil {
 		return errors.WithStack(err)
