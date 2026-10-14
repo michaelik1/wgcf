@@ -16,6 +16,8 @@ var profileFile string
 var keepalive int
 var shortMsg = "Generates a WireGuard profile from the current Cloudflare Warp account"
 
+const maxKeepalive = 65535
+
 var Cmd = &cobra.Command{
 	Use:   "generate",
 	Short: shortMsg,
@@ -32,6 +34,10 @@ func init() {
 }
 
 func generateProfile() error {
+	if err := validateKeepalive(keepalive); err != nil {
+		return err
+	}
+
 	if err := EnsureConfigValidAccount(); err != nil {
 		return errors.WithStack(err)
 	}
@@ -42,12 +48,21 @@ func generateProfile() error {
 		return errors.WithStack(err)
 	}
 
+	if thisDevice.Config == nil || len(thisDevice.Config.Peers) == 0 {
+		return errors.New("Cloudflare response did not contain a WireGuard peer")
+	}
+	peer := thisDevice.Config.Peers[0]
+	endpoint, err := cloudflare.WireGuardEndpoint(peer.Endpoint)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	profile, err := wireguard.NewProfile(&wireguard.ProfileData{
 		PrivateKey: viper.GetString(config.PrivateKey),
 		Address1:   thisDevice.Config.Interface.Addresses.V4,
 		Address2:   thisDevice.Config.Interface.Addresses.V6,
-		PublicKey:  thisDevice.Config.Peers[0].PublicKey,
-		Endpoint:   thisDevice.Config.Peers[0].Endpoint.Host,
+		PublicKey:  peer.PublicKey,
+		Endpoint:   endpoint,
 		Keepalive:  keepalive,
 	})
 	if err != nil {
@@ -58,5 +73,12 @@ func generateProfile() error {
 	}
 
 	log.Println("Successfully generated WireGuard profile:", profileFile)
+	return nil
+}
+
+func validateKeepalive(interval int) error {
+	if interval < 0 || interval > maxKeepalive {
+		return errors.Errorf("persistent keepalive interval must be between 0 and %d seconds, got %d", maxKeepalive, interval)
+	}
 	return nil
 }
